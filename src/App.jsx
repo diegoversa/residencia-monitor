@@ -58,7 +58,7 @@ const RESIDENCIA = {
     { id: 6,   name: "Hab. 6",      x: 10,  y: 203, w: 120, h: 95, type: "room" },
     { id: 7,   name: "Hab. 7",      x: 140, y: 203, w: 120, h: 95, type: "room" },
     { id: 101, name: "Salón",       x: 270, y: 203, w: 170, h: 95, type: "common", icon: "🛋️" },
-    { id: 102, name: "Comedor",     x: 450, y: 203, w: 120, h: 95, type: "common", icon: "🍽️" },
+    { id: 102, name: "Comedor",     x: 450, y: 203, w: 120, h: 95, type: "common", icon: "🍽️", beacon: 3 },
     { id: 103, name: "Enfermería",  x: 580, y: 203, w: 100, h: 95, type: "medical", icon: "🏥" },
   ],
 };
@@ -974,8 +974,8 @@ export default function App() {
   const [spH, setSpH] = useState({});
   const [wsConnected, setWsConnected] = useState(false);
   const [pulseraActiva, setPulseraActiva] = useState(false);
-  const [balizaVista, setBalizaVista] = useState({ 1: null, 2: null });
-  const [balizaRssi, setBalizaRssi] = useState({ 1: null, 2: null });
+  const [balizaVista, setBalizaVista] = useState({ 1: null, 2: null, 3: null });
+  const [balizaRssi, setBalizaRssi] = useState({ 1: null, 2: null, 3: null });
   const [wsEvents, setWsEvents] = useState([]);
   const [locationHistory, setLocationHistory] = useState([]);
   const [toasts, setToasts] = useState([]);
@@ -1139,6 +1139,7 @@ export default function App() {
   const balizas = useMemo(() => [
     { id: 1, room: "Habitación 1" },
     { id: 2, room: "Habitación 2" },
+    { id: 3, room: "Comedor" },
   ], []);
 
   const handleAck = (id) => setAlertas(p => p.filter(a => a.id !== id));
@@ -1167,7 +1168,7 @@ export default function App() {
             </div>
             <div>
               <div style={{ fontSize: 14, fontWeight: 700, color: THEME.text, letterSpacing: "-0.2px", lineHeight: 1.2 }}>Monitor BLE</div>
-              <div style={{ fontSize: 10, color: THEME.textMuted }}>1 pulsera · 2 balizas</div>
+              <div style={{ fontSize: 10, color: THEME.textMuted }}>1 pulsera · 3 balizas</div>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1288,7 +1289,7 @@ export default function App() {
           </div>
           <div>
             <h1 style={{ fontSize: 16, fontWeight: 700, color: THEME.text, letterSpacing: "-0.3px", lineHeight: 1.2 }}>Residencia · Monitor BLE</h1>
-            <span style={{ fontSize: 11, color: THEME.textMuted, fontWeight: 500 }}>1 pulsera · 2 balizas · datos en vivo</span>
+            <span style={{ fontSize: 11, color: THEME.textMuted, fontWeight: 500 }}>1 pulsera · 3 balizas · datos en vivo</span>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
@@ -1322,7 +1323,7 @@ export default function App() {
               </span>
             </span>
             <span style={{ color: THEME.border }}>|</span>
-            <span><span style={{ color: THEME.accent, fontWeight: 700 }}>2/2</span> balizas</span>
+            <span><span style={{ color: THEME.accent, fontWeight: 700 }}>3/3</span> balizas</span>
           </div>
           <div style={{ background: THEME.surfaceAlt, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: "6px 14px", fontFamily: "'JetBrains Mono',monospace", fontSize: 13, fontWeight: 600, color: THEME.textMuted, letterSpacing: 1 }}>
             {clock.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
