@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 
-// ─── URLs dinámicas — se calculan en App según serverIP ──────
-// (no hay constantes globales hardcoded; se pasan como prop donde se necesiten)
+// ─── URL pública del servidor (ngrok) ────────────────────────
+const PROD_URL = "https://footbath-popcorn-luncheon.ngrok-free.dev";
 
 // ─── PALETA TEMA CLARO ──────────────────────────────────────
 const THEME = {
@@ -721,7 +721,7 @@ function DiagPanel({ balizas, pulsera, wsConnected, apiUrl }) {
     try {
       const res = await fetch(
         `${apiUrl}/api/debug/ubicacion?nodo_id=${nodoId}&device_id=${pulsera?.dispositivo_ble || "PULSERA_001"}&rssi=${rssi}`,
-        { method: "POST" }
+        { method: "POST", headers: { "ngrok-skip-browser-warning": "true" } }
       );
       const data = await res.json();
       console.log("debug ubicacion:", data);
@@ -736,7 +736,7 @@ function DiagPanel({ balizas, pulsera, wsConnected, apiUrl }) {
     if (!apiUrl) return;
     setLoading(p => ({ ...p, [`ho${fromNodo}`]: true }));
     try {
-      const res = await fetch(`${apiUrl}/api/debug/handover?from_nodo=${fromNodo}`, { method: "POST" });
+      const res = await fetch(`${apiUrl}/api/debug/handover?from_nodo=${fromNodo}`, { method: "POST", headers: { "ngrok-skip-browser-warning": "true" } });
       const data = await res.json();
       console.log("handover:", data);
     } catch (e) {
@@ -749,7 +749,7 @@ function DiagPanel({ balizas, pulsera, wsConnected, apiUrl }) {
   const fetchRedisState = async () => {
     if (!apiUrl) return;
     try {
-      const res = await fetch(`${apiUrl}/api/debug/estado`);
+      const res = await fetch(`${apiUrl}/api/debug/estado`, { headers: { "ngrok-skip-browser-warning": "true" } });
       setRedisState(await res.json());
     } catch { setRedisState(null); }
   };
@@ -875,23 +875,28 @@ function DiagPanel({ balizas, pulsera, wsConnected, apiUrl }) {
 }
 
 // ─── SERVER SETUP ────────────────────────────────────────────
-function ServerSetup({ onConnect }) {
-  const [ip, setIp] = useState("172.20.10.2");
+function ServerSetup({ onConnect, currentUrl }) {
+  const [ip, setIp] = useState(currentUrl || PROD_URL);
   const [testing, setTesting] = useState(false);
   const [error, setError] = useState("");
 
-  const isValidIP = (v) => /^(\d{1,3}\.){3}\d{1,3}$/.test(v.trim());
+  const buildApiUrl = (v) => {
+    const s = v.trim();
+    if (s.startsWith("http")) return s.replace(/\/$/, "");
+    return `http://${s}:8000`;
+  };
 
   const handleConnect = async () => {
-    if (!isValidIP(ip)) { setError("IP no válida (ej: 172.20.10.2)"); return; }
+    if (!ip.trim()) { setError("Introduce una URL o IP"); return; }
     setTesting(true); setError("");
     try {
-      const r = await fetch(`http://${ip.trim()}:8000/api/debug/estado`,
-        { signal: AbortSignal.timeout(4000) });
+      const apiBase = buildApiUrl(ip);
+      const r = await fetch(`${apiBase}/api/debug/estado`,
+        { signal: AbortSignal.timeout(5000), headers: { "ngrok-skip-browser-warning": "true" } });
       if (r.ok) { localStorage.setItem("serverIP", ip.trim()); onConnect(ip.trim()); }
       else setError("El servidor respondió con error.");
     } catch {
-      setError("No se pudo conectar. Verifica la IP y que el servidor esté en marcha.");
+      setError("No se pudo conectar. Verifica la URL y que el servidor esté en marcha.");
     } finally { setTesting(false); }
   };
 
@@ -908,18 +913,18 @@ function ServerSetup({ onConnect }) {
         </div>
 
         <div style={{ marginBottom: 18 }}>
-          <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: THEME.textMuted, letterSpacing: 0.8, marginBottom: 8 }}>IP DEL SERVIDOR</label>
+          <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: THEME.textMuted, letterSpacing: 0.8, marginBottom: 8 }}>URL DEL SERVIDOR</label>
           <input
             value={ip} onChange={e => { setIp(e.target.value.replace(/,/g, ".")); setError(""); }}
             onKeyDown={e => e.key === "Enter" && handleConnect()}
-            placeholder="172.20.10.2" inputMode="url"
-            style={{ width: "100%", padding: "13px 14px", borderRadius: 11, fontSize: 18, fontFamily: "'JetBrains Mono',monospace", fontWeight: 600, letterSpacing: 1, border: `1.5px solid ${error ? THEME.danger : THEME.border}`, background: THEME.surfaceAlt, color: THEME.text, outline: "none" }}
+            placeholder="https://xxx.ngrok-free.app o 192.168.x.x" inputMode="url"
+            autoCapitalize="none" autoCorrect="off" spellCheck={false}
+            style={{ width: "100%", padding: "13px 14px", borderRadius: 11, fontSize: 14, fontFamily: "'JetBrains Mono',monospace", fontWeight: 600, letterSpacing: 0.5, border: `1.5px solid ${error ? THEME.danger : THEME.border}`, background: THEME.surfaceAlt, color: THEME.text, outline: "none" }}
           />
           {error
             ? <p style={{ color: THEME.danger, fontSize: 11, marginTop: 7 }}>⚠ {error}</p>
             : <p style={{ color: THEME.textSubtle, fontSize: 11, marginTop: 7 }}>
-                IP de tu PC en la red local.<br/>
-                Ejecuta <code style={{ background: THEME.border, borderRadius: 3, padding: "1px 5px" }}>ipconfig</code> en PowerShell para verla.
+                URL pública (ngrok) o IP local del servidor.
               </p>
           }
         </div>
@@ -960,12 +965,19 @@ function MobileNav({ activeTab, setActiveTab, alertCount }) {
 // ─── MAIN APP ───────────────────────────────────────────────
 export default function App() {
   // ── Config dinámica ─────────────────────────────────────────
-  const [serverIP, setServerIP] = useState(() => localStorage.getItem("serverIP"));
+  const [serverIP, setServerIP] = useState(() => localStorage.getItem("serverIP") || PROD_URL);
+  const [showSettings, setShowSettings] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const [activeTab, setActiveTab] = useState("map");
 
-  const API_URL = serverIP && serverIP !== "demo" ? `http://${serverIP}:8000` : null;
-  const WS_URL  = serverIP && serverIP !== "demo" ? `ws://${serverIP}:8000/ws`  : null;
+  // Construye URLs soportando tanto IP local como dominio ngrok completo
+  const buildUrls = (s) => {
+    if (!s || s === "demo") return { api: null, ws: null };
+    const base = s.startsWith("http") ? s.replace(/\/$/, "") : `http://${s}:8000`;
+    const wsBase = base.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
+    return { api: base, ws: `${wsBase}/ws` };
+  };
+  const { api: API_URL, ws: WS_URL } = buildUrls(serverIP);
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 768);
@@ -973,8 +985,8 @@ export default function App() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  const handleConnect = (ip) => { localStorage.setItem("serverIP", ip); setServerIP(ip); };
-  const handleChangeServer = () => { localStorage.removeItem("serverIP"); setServerIP(null); };
+  const handleConnect = (ip) => { localStorage.setItem("serverIP", ip); setServerIP(ip); setShowSettings(false); };
+  const handleChangeServer = () => setShowSettings(true);
 
   // ── Estado principal ─────────────────────────────────────────
   const [residentes, setResidentes] = useState([]);
@@ -1166,8 +1178,19 @@ export default function App() {
   const hrNow = pulsera?.estado_actual?.heart_rate?.value || 0;
   const spNow = pulsera?.estado_actual?.spo2?.value || 0;
 
-  // ── Pantalla de configuración (después de todos los hooks) ───
-  if (!serverIP) return <ServerSetup onConnect={handleConnect} />;
+  // ── Modal de ajustes de servidor (overlay) ──────────────────
+  const settingsModal = showSettings && (
+    <div style={{ position: "fixed", inset: 0, zIndex: 500, background: "rgba(15,23,42,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+      onClick={e => { if (e.target === e.currentTarget) setShowSettings(false); }}>
+      <div style={{ width: "100%", maxWidth: 400, borderRadius: 22, overflow: "hidden", boxShadow: "0 24px 64px rgba(15,23,42,0.25)" }}>
+        <ServerSetup onConnect={handleConnect} currentUrl={serverIP !== "demo" ? serverIP : PROD_URL} />
+        <div style={{ background: THEME.surface, padding: "0 28px 20px", display: "flex", gap: 10 }}>
+          <button onClick={() => setShowSettings(false)} style={{ flex: 1, padding: 11, borderRadius: 10, border: `1px solid ${THEME.border}`, background: THEME.surfaceAlt, color: THEME.textMuted, fontSize: 13, cursor: "pointer" }}>Cancelar</button>
+          <button onClick={() => { localStorage.setItem("serverIP", "demo"); setServerIP("demo"); setShowSettings(false); }} style={{ flex: 1, padding: 11, borderRadius: 10, border: `1px solid ${THEME.border}`, background: "transparent", color: THEME.textSubtle, fontSize: 13, cursor: "pointer" }}>Ver demo</button>
+        </div>
+      </div>
+    </div>
+  );
 
   // ── LAYOUT MÓVIL ────────────────────────────────────────────
   if (isMobile) {
@@ -1255,6 +1278,7 @@ export default function App() {
         </div>
         <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} alertCount={alertas.length} />
         <Toast toasts={toasts} onDismiss={(id) => setToasts(t => t.filter(x => x.id !== id))} />
+        {settingsModal}
       </div>
     );
   }
@@ -1464,6 +1488,7 @@ export default function App() {
         </aside>
       </div>
       <Toast toasts={toasts} onDismiss={(id) => setToasts(t => t.filter(x => x.id !== id))} />
+      {settingsModal}
     </div>
   );
 }
