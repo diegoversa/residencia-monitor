@@ -910,9 +910,9 @@ function ServerSetup({ onConnect }) {
         <div style={{ marginBottom: 18 }}>
           <label style={{ display: "block", fontSize: 10, fontWeight: 700, color: THEME.textMuted, letterSpacing: 0.8, marginBottom: 8 }}>IP DEL SERVIDOR</label>
           <input
-            value={ip} onChange={e => { setIp(e.target.value); setError(""); }}
+            value={ip} onChange={e => { setIp(e.target.value.replace(/,/g, ".")); setError(""); }}
             onKeyDown={e => e.key === "Enter" && handleConnect()}
-            placeholder="172.20.10.2" inputMode="decimal"
+            placeholder="172.20.10.2" inputMode="url"
             style={{ width: "100%", padding: "13px 14px", borderRadius: 11, fontSize: 18, fontFamily: "'JetBrains Mono',monospace", fontWeight: 600, letterSpacing: 1, border: `1.5px solid ${error ? THEME.danger : THEME.border}`, background: THEME.surfaceAlt, color: THEME.text, outline: "none" }}
           />
           {error
