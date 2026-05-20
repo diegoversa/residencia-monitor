@@ -49,7 +49,7 @@ const RESIDENCIA = {
     // Fila norte — solo Hab 1 y Hab 2 tienen baliza activa
     { id: 1,   name: "Hab. 1",      x: 10,  y: 48, w: 135, h: 110, type: "room",    beacon: 1 },
     { id: 2,   name: "Hab. 2",      x: 155, y: 48, w: 135, h: 110, type: "room",    beacon: 2 },
-    { id: 3,   name: "Hab. 3",      x: 300, y: 48, w: 120, h: 110, type: "room" },
+    { id: 30,  name: "Hab. 3",      x: 300, y: 48, w: 120, h: 110, type: "room" },
     { id: 4,   name: "Hab. 4",      x: 430, y: 48, w: 120, h: 110, type: "room" },
     { id: 5,   name: "Hab. 5",      x: 560, y: 48, w: 120, h: 110, type: "room" },
     // Pasillo central
@@ -58,7 +58,7 @@ const RESIDENCIA = {
     { id: 6,   name: "Hab. 6",      x: 10,  y: 203, w: 120, h: 95, type: "room" },
     { id: 7,   name: "Hab. 7",      x: 140, y: 203, w: 120, h: 95, type: "room" },
     { id: 101, name: "Salón",       x: 270, y: 203, w: 170, h: 95, type: "common", icon: "🛋️" },
-    { id: 102, name: "Comedor",     x: 450, y: 203, w: 120, h: 95, type: "common", icon: "🍽️", beacon: 3 },
+    { id: 3,   name: "Comedor",     x: 450, y: 203, w: 120, h: 95, type: "common", icon: "🍽️", beacon: 3 },
     { id: 103, name: "Enfermería",  x: 580, y: 203, w: 100, h: 95, type: "medical", icon: "🏥" },
   ],
 };
@@ -92,7 +92,7 @@ const timeAgo = (ts) => {
   return `${Math.floor(d / 3600)}h`;
 };
 
-const roomLabel = (hid) => hid === 1 ? "Habitación 1" : hid === 2 ? "Habitación 2" : "Zona común";
+const roomLabel = (hid) => hid === 1 ? "Habitación 1" : hid === 2 ? "Habitación 2" : hid === 3 ? "Comedor" : "Zona común";
 
 // ─── TOAST COMPONENT ────────────────────────────────────────
 function Toast({ toasts, onDismiss }) {
