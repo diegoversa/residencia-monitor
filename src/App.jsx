@@ -1135,22 +1135,22 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverIP]);
 
-  const handleAck = (id) => setAlertas(p => p.filter(a => a.id !== id));
-  const selectedRes = residentes.find(r => r.id === selectedId);
-
-  // ── Pantalla de configuración ────────────────────────────────
-  if (!serverIP) return <ServerSetup onConnect={handleConnect} />;
-  const pulsera = residentes[0];
-  const critCount = alertas.filter(a => a.severidad === "critical").length;
-  const warnCount = alertas.filter(a => a.severidad === "warning").length;
-
+  // useMemo debe ir ANTES de cualquier return condicional (reglas de hooks)
   const balizas = useMemo(() => [
     { id: 1, room: "Habitación 1" },
     { id: 2, room: "Habitación 2" },
   ], []);
 
+  const handleAck = (id) => setAlertas(p => p.filter(a => a.id !== id));
+  const selectedRes = residentes.find(r => r.id === selectedId);
+  const pulsera = residentes[0];
+  const critCount = alertas.filter(a => a.severidad === "critical").length;
+  const warnCount = alertas.filter(a => a.severidad === "warning").length;
   const hrNow = pulsera?.estado_actual?.heart_rate?.value || 0;
   const spNow = pulsera?.estado_actual?.spo2?.value || 0;
+
+  // ── Pantalla de configuración (después de todos los hooks) ───
+  if (!serverIP) return <ServerSetup onConnect={handleConnect} />;
 
   // ── LAYOUT MÓVIL ────────────────────────────────────────────
   if (isMobile) {
