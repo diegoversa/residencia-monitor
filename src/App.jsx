@@ -564,7 +564,7 @@ function EventsLog({ wsEvents, wsConnected }) {
 
 // ─── PANEL DE DISPOSITIVOS (PULSERA + BALIZAS) ──────────────
 
-function DevicesPanel({ pulsera, balizas, wsConnected, pulseraActiva, balizaVista, balizaRssi, wsEvents, onSelectPulsera, selectedId, apiUrl }) {
+function DevicesPanel({ pulsera, balizas, wsConnected, pulseraActiva, balizaVista, balizaRssi, balizaHeartbeat, wsEvents, onSelectPulsera, selectedId, apiUrl }) {
   const st = pulsera?.estado_actual || {};
   const hr = st.heart_rate?.value || 0;
   const spo2 = st.spo2?.value || 0;
@@ -632,8 +632,10 @@ function DevicesPanel({ pulsera, balizas, wsConnected, pulseraActiva, balizaVist
             const isActive = b.id === activeBeacon;
             const lastVista = balizaVista?.[b.id];
             const rssiVal = balizaRssi?.[b.id];
+            const lastHb = balizaHeartbeat?.[b.id];
+            const isOnline = wsConnected && lastHb && (Date.now() - lastHb) < 25000;
             const vistaMakeMs = lastVista ? Date.now() - lastVista : null;
-            const vistaLabel = !wsConnected ? "—" : lastVista ? `hace ${Math.round(vistaMakeMs / 1000)}s` : "sin eventos";
+            const vistaLabel = !wsConnected ? "—" : lastVista ? `hace ${Math.round(vistaMakeMs / 1000)}s` : "sin pulsera cerca";
             // Color del RSSI: verde > -60, amarillo -60/-80, rojo < -80
             const rssiColor = rssiVal == null ? THEME.textSubtle
               : rssiVal > -60 ? THEME.ok
@@ -649,13 +651,22 @@ function DevicesPanel({ pulsera, balizas, wsConnected, pulseraActiva, balizaVist
                 boxShadow: THEME.shadow, transition: "all 0.2s",
               }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{
-                    width: 36, height: 36, borderRadius: 10,
-                    background: isActive ? THEME.accent : THEME.surfaceAlt,
-                    border: `1px solid ${isActive ? THEME.accent : THEME.border}`,
-                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
-                    boxShadow: isActive ? `0 0 0 4px ${THEME.accent}20` : "none",
-                  }}>📡</div>
+                  <div style={{ position: "relative", flexShrink: 0 }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 10,
+                      background: isActive ? THEME.accent : THEME.surfaceAlt,
+                      border: `1px solid ${isActive ? THEME.accent : THEME.border}`,
+                      display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16,
+                      boxShadow: isActive ? `0 0 0 4px ${THEME.accent}20` : "none",
+                    }}>📡</div>
+                    <div style={{
+                      position: "absolute", bottom: -2, right: -2,
+                      width: 11, height: 11, borderRadius: "50%",
+                      background: !wsConnected ? THEME.offline : isOnline ? THEME.ok : THEME.danger,
+                      border: `2px solid ${THEME.surface}`,
+                      boxShadow: isOnline ? `0 0 5px ${THEME.ok}80` : "none",
+                    }} title={!wsConnected ? "Sin servidor" : isOnline ? "Enchufada" : "Apagada / sin señal"} />
+                  </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <div style={{ color: THEME.text, fontSize: 12, fontWeight: 700 }}>Baliza {b.id} · {b.room}</div>
@@ -976,6 +987,7 @@ export default function App() {
   const [pulseraActiva, setPulseraActiva] = useState(false);
   const [balizaVista, setBalizaVista] = useState({ 1: null, 2: null, 3: null });
   const [balizaRssi, setBalizaRssi] = useState({ 1: null, 2: null, 3: null });
+  const [balizaHeartbeat, setBalizaHeartbeat] = useState({ 1: null, 2: null, 3: null });
   const [wsEvents, setWsEvents] = useState([]);
   const [locationHistory, setLocationHistory] = useState([]);
   const [toasts, setToasts] = useState([]);
@@ -1095,6 +1107,10 @@ export default function App() {
             setTimeout(() => setToasts(prev => prev.filter(x => x.id !== toastId)), msg.data.severidad === "critical" ? 8000 : 5000);
             setAlertas(prev => [msg.data, ...prev]);
 
+          } else if (msg.event === "baliza_heartbeat" && msg.data) {
+            const { nodo_id } = msg.data;
+            setBalizaHeartbeat(prev => ({ ...prev, [nodo_id]: Date.now() }));
+
           } else if (msg.event === "state_sync" && msg.data) {
             addEvent("sync", "Sincronización de estado recibida");
 
@@ -1207,7 +1223,7 @@ export default function App() {
             </div>
           )}
           {activeTab === "devices" && (
-            <DevicesPanel pulsera={pulsera} balizas={balizas} wsConnected={wsConnected} pulseraActiva={pulseraActiva} balizaVista={balizaVista} balizaRssi={balizaRssi} wsEvents={wsEvents} onSelectPulsera={(id) => { setSelectedId(id); setActiveTab("detail"); }} selectedId={selectedId} apiUrl={API_URL} />
+            <DevicesPanel pulsera={pulsera} balizas={balizas} wsConnected={wsConnected} pulseraActiva={pulseraActiva} balizaVista={balizaVista} balizaRssi={balizaRssi} balizaHeartbeat={balizaHeartbeat} wsEvents={wsEvents} onSelectPulsera={(id) => { setSelectedId(id); setActiveTab("detail"); }} selectedId={selectedId} apiUrl={API_URL} />
           )}
           {activeTab === "detail" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -1340,7 +1356,7 @@ export default function App() {
             <div style={{ fontSize: 11, color: THEME.textSubtle, marginTop: 2 }}>Hardware desplegado</div>
           </div>
           <div style={{ flex: 1, overflow: "auto", padding: 14 }}>
-            <DevicesPanel pulsera={pulsera} balizas={balizas} wsConnected={wsConnected} pulseraActiva={pulseraActiva} balizaVista={balizaVista} balizaRssi={balizaRssi} wsEvents={wsEvents} onSelectPulsera={setSelectedId} selectedId={selectedId} apiUrl={API_URL} />
+            <DevicesPanel pulsera={pulsera} balizas={balizas} wsConnected={wsConnected} pulseraActiva={pulseraActiva} balizaVista={balizaVista} balizaRssi={balizaRssi} balizaHeartbeat={balizaHeartbeat} wsEvents={wsEvents} onSelectPulsera={setSelectedId} selectedId={selectedId} apiUrl={API_URL} />
           </div>
         </aside>
 
