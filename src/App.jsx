@@ -3,6 +3,29 @@ import { useState, useEffect, useMemo, useRef } from "react";
 // ─── URL pública del servidor (ngrok) ────────────────────────
 const PROD_URL = "https://footbath-popcorn-luncheon.ngrok-free.dev";
 
+// Header requerido por ngrok para saltarse la pantalla de aviso en fetch
+const NGROK_HEADERS = { "ngrok-skip-browser-warning": "true" };
+
+// Convierte IP local o URL completa en base URL de la API
+const buildApiBase = (s) => {
+  if (!s || s === "demo") return null;
+  return s.startsWith("http") ? s.replace(/\/$/, "") : `http://${s}:8000`;
+};
+
+// Deriva API_URL y WS_URL desde serverIP
+const buildUrls = (s) => {
+  const base = buildApiBase(s);
+  if (!base) return { api: null, ws: null };
+  return { api: base, ws: base.replace(/^https:/, "wss:").replace(/^http:/, "ws:") + "/ws" };
+};
+
+// Balizas desplegadas (constante de módulo — no cambia en runtime)
+const BALIZAS = [
+  { id: 1, room: "Habitación 1" },
+  { id: 2, room: "Habitación 2" },
+  { id: 3, room: "Comedor" },
+];
+
 // ─── PALETA TEMA CLARO ──────────────────────────────────────
 const THEME = {
   bg:         "#f4f6fb",
@@ -92,7 +115,8 @@ const timeAgo = (ts) => {
   return `${Math.floor(d / 3600)}h`;
 };
 
-const roomLabel = (hid) => hid === 1 ? "Habitación 1" : hid === 2 ? "Habitación 2" : hid === 3 ? "Comedor" : "Zona común";
+const ROOM_LABELS = { 1: "Habitación 1", 2: "Habitación 2", 3: "Comedor" };
+const roomLabel = (hid) => ROOM_LABELS[hid] ?? "Zona común";
 
 // ─── TOAST COMPONENT ────────────────────────────────────────
 function Toast({ toasts, onDismiss }) {
@@ -564,7 +588,7 @@ function EventsLog({ wsEvents, wsConnected }) {
 
 // ─── PANEL DE DISPOSITIVOS (PULSERA + BALIZAS) ──────────────
 
-function DevicesPanel({ pulsera, balizas, wsConnected, pulseraActiva, balizaVista, balizaRssi, balizaHeartbeat, wsEvents, onSelectPulsera, selectedId, apiUrl }) {
+function DevicesPanel({ pulsera, wsConnected, pulseraActiva, balizaVista, balizaRssi, balizaHeartbeat, wsEvents, onSelectPulsera, selectedId, apiUrl }) {
   const st = pulsera?.estado_actual || {};
   const hr = st.heart_rate?.value || 0;
   const spo2 = st.spo2?.value || 0;
@@ -625,10 +649,10 @@ function DevicesPanel({ pulsera, balizas, wsConnected, pulseraActiva, balizaVist
       {/* Balizas */}
       <div>
         <div style={{ fontSize: 10, color: THEME.textMuted, fontWeight: 700, letterSpacing: 0.6, padding: "0 4px 8px" }}>
-          BALIZAS · {balizas.length}/2
+          BALIZAS · {BALIZAS.length}/3
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {balizas.map(b => {
+          {BALIZAS.map(b => {
             const isActive = b.id === activeBeacon;
             const lastVista = balizaVista?.[b.id];
             const rssiVal = balizaRssi?.[b.id];
@@ -704,13 +728,13 @@ function DevicesPanel({ pulsera, balizas, wsConnected, pulseraActiva, balizaVist
       <EventsLog wsEvents={wsEvents} wsConnected={wsConnected} />
 
       {/* PANEL DE DIAGNÓSTICO */}
-      <DiagPanel balizas={balizas} pulsera={pulsera} wsConnected={wsConnected} apiUrl={apiUrl} />
+      <DiagPanel pulsera={pulsera} wsConnected={wsConnected} apiUrl={apiUrl} />
     </div>
   );
 }
 
 // ─── PANEL DE DIAGNÓSTICO ────────────────────────────────────
-function DiagPanel({ balizas, pulsera, wsConnected, apiUrl }) {
+function DiagPanel({ pulsera, wsConnected, apiUrl }) {
   const [loading, setLoading] = useState({});
   const [redisState, setRedisState] = useState(null);
   const [expanded, setExpanded] = useState(false);
@@ -721,7 +745,7 @@ function DiagPanel({ balizas, pulsera, wsConnected, apiUrl }) {
     try {
       const res = await fetch(
         `${apiUrl}/api/debug/ubicacion?nodo_id=${nodoId}&device_id=${pulsera?.dispositivo_ble || "PULSERA_001"}&rssi=${rssi}`,
-        { method: "POST", headers: { "ngrok-skip-browser-warning": "true" } }
+        { method: "POST", headers: NGROK_HEADERS }
       );
       const data = await res.json();
       console.log("debug ubicacion:", data);
@@ -736,7 +760,7 @@ function DiagPanel({ balizas, pulsera, wsConnected, apiUrl }) {
     if (!apiUrl) return;
     setLoading(p => ({ ...p, [`ho${fromNodo}`]: true }));
     try {
-      const res = await fetch(`${apiUrl}/api/debug/handover?from_nodo=${fromNodo}`, { method: "POST", headers: { "ngrok-skip-browser-warning": "true" } });
+      const res = await fetch(`${apiUrl}/api/debug/handover?from_nodo=${fromNodo}`, { method: "POST", headers: NGROK_HEADERS });
       const data = await res.json();
       console.log("handover:", data);
     } catch (e) {
@@ -749,7 +773,7 @@ function DiagPanel({ balizas, pulsera, wsConnected, apiUrl }) {
   const fetchRedisState = async () => {
     if (!apiUrl) return;
     try {
-      const res = await fetch(`${apiUrl}/api/debug/estado`, { headers: { "ngrok-skip-browser-warning": "true" } });
+      const res = await fetch(`${apiUrl}/api/debug/estado`, { headers: NGROK_HEADERS });
       setRedisState(await res.json());
     } catch { setRedisState(null); }
   };
@@ -778,7 +802,7 @@ function DiagPanel({ balizas, pulsera, wsConnected, apiUrl }) {
               SIMULAR PRESENCIA (prueba servidor + frontend)
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {balizas.map(b => (
+              {BALIZAS.map(b => (
                 <div key={b.id} style={{ display: "flex", gap: 6 }}>
                   <div style={{ flex: 1, fontSize: 10, color: THEME.textMuted, alignSelf: "center" }}>
                     📡 Baliza {b.id} · {b.room}
@@ -819,7 +843,7 @@ function DiagPanel({ balizas, pulsera, wsConnected, apiUrl }) {
               FORZAR HANDOVER FÍSICO (requiere firmware actualizado)
             </div>
             <div style={{ display: "flex", gap: 6 }}>
-              {balizas.map(b => (
+              {BALIZAS.map(b => (
                 <button
                   key={b.id}
                   disabled={loading[`ho${b.id}`]}
@@ -880,17 +904,11 @@ function ServerSetup({ onConnect, currentUrl }) {
   const [testing, setTesting] = useState(false);
   const [error, setError] = useState("");
 
-  const buildApiUrl = (v) => {
-    const s = v.trim();
-    if (s.startsWith("http")) return s.replace(/\/$/, "");
-    return `http://${s}:8000`;
-  };
-
   const handleConnect = async () => {
     if (!ip.trim()) { setError("Introduce una URL o IP"); return; }
     setTesting(true); setError("");
     try {
-      const apiBase = buildApiUrl(ip);
+      const apiBase = buildApiBase(ip);
       const r = await fetch(`${apiBase}/api/debug/estado`,
         { signal: AbortSignal.timeout(5000), headers: { "ngrok-skip-browser-warning": "true" } });
       if (r.ok) { localStorage.setItem("serverIP", ip.trim()); onConnect(ip.trim()); }
@@ -940,6 +958,16 @@ function ServerSetup({ onConnect, currentUrl }) {
   );
 }
 
+// ─── LIVE CLOCK (aislado para evitar re-render del App entero cada segundo) ──
+function LiveClock() {
+  const [t, setT] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setT(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return <>{t.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</>;
+}
+
 // ─── MOBILE NAV ──────────────────────────────────────────────
 function MobileNav({ activeTab, setActiveTab, alertCount }) {
   const tabs = [
@@ -970,14 +998,7 @@ export default function App() {
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const [activeTab, setActiveTab] = useState("map");
 
-  // Construye URLs soportando tanto IP local como dominio ngrok completo
-  const buildUrls = (s) => {
-    if (!s || s === "demo") return { api: null, ws: null };
-    const base = s.startsWith("http") ? s.replace(/\/$/, "") : `http://${s}:8000`;
-    const wsBase = base.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
-    return { api: base, ws: `${wsBase}/ws` };
-  };
-  const { api: API_URL, ws: WS_URL } = buildUrls(serverIP);
+  const { api: API_URL, ws: WS_URL } = useMemo(() => buildUrls(serverIP), [serverIP]);
 
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 768);
@@ -992,7 +1013,6 @@ export default function App() {
   const [residentes, setResidentes] = useState([]);
   const [alertas, setAlertas] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
-  const [clock, setClock] = useState(new Date());
   const [hrH, setHrH] = useState({});
   const [spH, setSpH] = useState({});
   const [wsConnected, setWsConnected] = useState(false);
@@ -1005,10 +1025,6 @@ export default function App() {
   const [toasts, setToasts] = useState([]);
   const prevLocationRef = useRef({});
 
-  useEffect(() => {
-    const t = setInterval(() => setClock(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
 
   useEffect(() => {
     const init = INITIAL_RESIDENTES.map(r => ({
@@ -1163,13 +1179,6 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverIP]);
 
-  // useMemo debe ir ANTES de cualquier return condicional (reglas de hooks)
-  const balizas = useMemo(() => [
-    { id: 1, room: "Habitación 1" },
-    { id: 2, room: "Habitación 2" },
-    { id: 3, room: "Comedor" },
-  ], []);
-
   const handleAck = (id) => setAlertas(p => p.filter(a => a.id !== id));
   const selectedRes = residentes.find(r => r.id === selectedId);
   const pulsera = residentes[0];
@@ -1186,7 +1195,7 @@ export default function App() {
         <ServerSetup onConnect={handleConnect} currentUrl={serverIP !== "demo" ? serverIP : PROD_URL} />
         <div style={{ background: THEME.surface, padding: "0 28px 20px", display: "flex", gap: 10 }}>
           <button onClick={() => setShowSettings(false)} style={{ flex: 1, padding: 11, borderRadius: 10, border: `1px solid ${THEME.border}`, background: THEME.surfaceAlt, color: THEME.textMuted, fontSize: 13, cursor: "pointer" }}>Cancelar</button>
-          <button onClick={() => { localStorage.setItem("serverIP", "demo"); setServerIP("demo"); setShowSettings(false); }} style={{ flex: 1, padding: 11, borderRadius: 10, border: `1px solid ${THEME.border}`, background: "transparent", color: THEME.textSubtle, fontSize: 13, cursor: "pointer" }}>Ver demo</button>
+          <button onClick={() => handleConnect("demo")} style={{ flex: 1, padding: 11, borderRadius: 10, border: `1px solid ${THEME.border}`, background: "transparent", color: THEME.textSubtle, fontSize: 13, cursor: "pointer" }}>Ver demo</button>
         </div>
       </div>
     </div>
@@ -1246,7 +1255,7 @@ export default function App() {
             </div>
           )}
           {activeTab === "devices" && (
-            <DevicesPanel pulsera={pulsera} balizas={balizas} wsConnected={wsConnected} pulseraActiva={pulseraActiva} balizaVista={balizaVista} balizaRssi={balizaRssi} balizaHeartbeat={balizaHeartbeat} wsEvents={wsEvents} onSelectPulsera={(id) => { setSelectedId(id); setActiveTab("detail"); }} selectedId={selectedId} apiUrl={API_URL} />
+            <DevicesPanel pulsera={pulsera} wsConnected={wsConnected} pulseraActiva={pulseraActiva} balizaVista={balizaVista} balizaRssi={balizaRssi} balizaHeartbeat={balizaHeartbeat} wsEvents={wsEvents} onSelectPulsera={(id) => { setSelectedId(id); setActiveTab("detail"); }} selectedId={selectedId} apiUrl={API_URL} />
           )}
           {activeTab === "detail" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -1366,7 +1375,7 @@ export default function App() {
             <span><span style={{ color: THEME.accent, fontWeight: 700 }}>3/3</span> balizas</span>
           </div>
           <div style={{ background: THEME.surfaceAlt, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: "6px 14px", fontFamily: "'JetBrains Mono',monospace", fontSize: 13, fontWeight: 600, color: THEME.textMuted, letterSpacing: 1 }}>
-            {clock.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            <LiveClock />
           </div>
         </div>
       </header>
@@ -1380,7 +1389,7 @@ export default function App() {
             <div style={{ fontSize: 11, color: THEME.textSubtle, marginTop: 2 }}>Hardware desplegado</div>
           </div>
           <div style={{ flex: 1, overflow: "auto", padding: 14 }}>
-            <DevicesPanel pulsera={pulsera} balizas={balizas} wsConnected={wsConnected} pulseraActiva={pulseraActiva} balizaVista={balizaVista} balizaRssi={balizaRssi} balizaHeartbeat={balizaHeartbeat} wsEvents={wsEvents} onSelectPulsera={setSelectedId} selectedId={selectedId} apiUrl={API_URL} />
+            <DevicesPanel pulsera={pulsera} wsConnected={wsConnected} pulseraActiva={pulseraActiva} balizaVista={balizaVista} balizaRssi={balizaRssi} balizaHeartbeat={balizaHeartbeat} wsEvents={wsEvents} onSelectPulsera={setSelectedId} selectedId={selectedId} apiUrl={API_URL} />
           </div>
         </aside>
 
