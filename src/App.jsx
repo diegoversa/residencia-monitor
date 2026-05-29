@@ -19,13 +19,6 @@ const buildUrls = (s) => {
   return { api: base, ws: base.replace(/^https:/, "wss:").replace(/^http:/, "ws:") + "/ws" };
 };
 
-// Balizas desplegadas (constante de módulo — no cambia en runtime)
-const BALIZAS = [
-  { id: 1, room: "Habitación 1" },
-  { id: 2, room: "Habitación 2" },
-  { id: 3, room: "Comedor" },
-];
-
 // ─── PALETA TEMA CLARO ──────────────────────────────────────
 const THEME = {
   bg:         "#f4f6fb",
@@ -46,7 +39,7 @@ const THEME = {
   shadowLg:   "0 4px 16px rgba(15,23,42,0.08), 0 12px 32px rgba(15,23,42,0.06)",
 };
 
-// ─── DATOS DE LA PULSERA REAL ───────────────────────────────
+// ─── DATOS DE LAS PULSERAS REALES ───────────────────────────
 const INITIAL_RESIDENTES = [
   {
     id: 1,
@@ -60,7 +53,22 @@ const INITIAL_RESIDENTES = [
     umbral_hr_max: 100,
     umbral_spo2_warn: 95,
     umbral_spo2_crit: 92,
-    notas_medicas: "Dispositivo de demo. Una sola pulsera BLE detectada por dos balizas (Hab 1 y Hab 2).",
+    notas_medicas: "Pulsera #001 — XIAO ESP32-S3 + MAX30102 + MPU-6050.",
+    genero: "M",
+  },
+  {
+    id: 2,
+    nombre: "Residente",
+    apellidos: "2",
+    edad: 0,
+    habitacion_id: 2,
+    dispositivo_ble: "PULSERA_002",
+    color: "#10b981",
+    umbral_hr_min: 50,
+    umbral_hr_max: 100,
+    umbral_spo2_warn: 95,
+    umbral_spo2_crit: 92,
+    notas_medicas: "Pulsera #002 — XIAO ESP32-S3 + MAX30102 + MPU-6050.",
     genero: "M",
   },
 ];
@@ -588,71 +596,87 @@ function EventsLog({ wsEvents, wsConnected }) {
 
 // ─── PANEL DE DISPOSITIVOS (PULSERA + BALIZAS) ──────────────
 
-function DevicesPanel({ pulsera, wsConnected, pulseraActiva, balizaVista, balizaRssi, balizaHeartbeat, wsEvents, onSelectPulsera, selectedId, apiUrl }) {
-  const st = pulsera?.estado_actual || {};
-  const hr = st.heart_rate?.value || 0;
-  const spo2 = st.spo2?.value || 0;
-  const lastTs = st.heart_rate?.timestamp || st.spo2?.timestamp;
-  const activeBeacon = pulsera?.ubicacion_actual === 1 ? 1 : pulsera?.ubicacion_actual === 2 ? 2 : null;
+function DevicesPanel({ residentes, wsConnected, balizaVista, balizaRssi, balizaHeartbeat, wsEvents, onSelectPulsera, selectedId, apiUrl, balizas }) {
+  // Una pulsera está "activa" si reportó HR o SpO2 en los últimos 30s
+  const isPulseraActiva = (r) => {
+    if (!wsConnected) return false;
+    const ts = r?.estado_actual?.heart_rate?.timestamp || r?.estado_actual?.spo2?.timestamp;
+    if (!ts) return false;
+    return (Date.now() - new Date(ts).getTime()) < 30000;
+  };
+
+  // Baliza activa: la primera pulsera activa marca cuál baliza está reportando
+  const primeraActiva = residentes.find(isPulseraActiva);
+  const activeBeacon = primeraActiva?.ubicacion_actual ?? null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      {/* Pulsera */}
+      {/* Pulseras */}
       <div>
         <div style={{ fontSize: 10, color: THEME.textMuted, fontWeight: 700, letterSpacing: 0.6, padding: "0 4px 8px" }}>
-          PULSERA
+          PULSERAS · {residentes.length}
         </div>
-        {pulsera && (
-          <div
-            onClick={() => onSelectPulsera(pulsera.id)}
-            style={{
-              background: selectedId === pulsera.id ? THEME.accentSoft : THEME.surface,
-              border: `1px solid ${selectedId === pulsera.id ? `${THEME.accent}55` : THEME.border}`,
-              borderRadius: 12, padding: 12, cursor: "pointer",
-              transition: "all 0.15s",
-              boxShadow: THEME.shadow,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-              <Avatar residente={pulsera} size={36} showStatus status={pulseraActiva ? "ok" : "offline"} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ color: THEME.text, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {pulsera.dispositivo_ble}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {residentes.map(pulsera => {
+            const st = pulsera.estado_actual || {};
+            const hr = st.heart_rate?.value || 0;
+            const spo2 = st.spo2?.value || 0;
+            const lastTs = st.heart_rate?.timestamp || st.spo2?.timestamp;
+            const activa = isPulseraActiva(pulsera);
+            return (
+              <div
+                key={pulsera.id}
+                onClick={() => onSelectPulsera(pulsera.id)}
+                style={{
+                  background: selectedId === pulsera.id ? THEME.accentSoft : THEME.surface,
+                  border: `1px solid ${selectedId === pulsera.id ? `${THEME.accent}55` : THEME.border}`,
+                  borderRadius: 12, padding: 12, cursor: "pointer",
+                  transition: "all 0.15s",
+                  boxShadow: THEME.shadow,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                  <Avatar residente={pulsera} size={36} showStatus status={activa ? "ok" : "offline"} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ color: THEME.text, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {pulsera.dispositivo_ble}
+                    </div>
+                    <div style={{ color: THEME.textMuted, fontSize: 11 }}>
+                      {pulsera.nombre} {pulsera.apellidos} · {roomLabel(pulsera.habitacion_id)}
+                    </div>
+                  </div>
                 </div>
-                <div style={{ color: THEME.textMuted, fontSize: 11 }}>
-                  {pulsera.nombre} {pulsera.apellidos} · {roomLabel(pulsera.habitacion_id)}
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                  <div style={{ flex: 1, background: THEME.surfaceAlt, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: "6px 10px", textAlign: "center" }}>
+                    <div style={{ fontSize: 9, color: THEME.textSubtle, fontWeight: 600 }}>♥ HR</div>
+                    <div style={{ fontSize: 14, color: activa && hr > 0 ? THEME.danger : THEME.textSubtle, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>{activa && hr > 0 ? hr : "—"}</div>
+                  </div>
+                  <div style={{ flex: 1, background: THEME.surfaceAlt, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: "6px 10px", textAlign: "center" }}>
+                    <div style={{ fontSize: 9, color: THEME.textSubtle, fontWeight: 600 }}>◉ SpO₂</div>
+                    <div style={{ fontSize: 14, color: activa && spo2 > 0 ? THEME.accent : THEME.textSubtle, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>{activa && spo2 > 0 ? `${spo2}%` : "—"}</div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, fontSize: 10, color: THEME.textSubtle }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: "50%", display: "inline-block",
+                      background: !wsConnected ? THEME.offline : activa ? THEME.ok : THEME.warn }} />
+                    {!wsConnected ? "Sin servidor" : activa ? "Activa" : "Sin señal BLE"}
+                  </span>
+                  <span>{activa ? timeAgo(lastTs) : "—"}</span>
                 </div>
               </div>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-              <div style={{ flex: 1, background: THEME.surfaceAlt, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: "6px 10px", textAlign: "center" }}>
-                <div style={{ fontSize: 9, color: THEME.textSubtle, fontWeight: 600 }}>♥ HR</div>
-                <div style={{ fontSize: 14, color: pulseraActiva && hr > 0 ? THEME.danger : THEME.textSubtle, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>{pulseraActiva && hr > 0 ? hr : "—"}</div>
-              </div>
-              <div style={{ flex: 1, background: THEME.surfaceAlt, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: "6px 10px", textAlign: "center" }}>
-                <div style={{ fontSize: 9, color: THEME.textSubtle, fontWeight: 600 }}>◉ SpO₂</div>
-                <div style={{ fontSize: 14, color: pulseraActiva && spo2 > 0 ? THEME.accent : THEME.textSubtle, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>{pulseraActiva && spo2 > 0 ? `${spo2}%` : "—"}</div>
-              </div>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, fontSize: 10, color: THEME.textSubtle }}>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", display: "inline-block",
-                  background: !wsConnected ? THEME.offline : pulseraActiva ? THEME.ok : THEME.warn }} />
-                {!wsConnected ? "Sin servidor" : pulseraActiva ? "Activa" : "Sin señal BLE"}
-              </span>
-              <span>{pulseraActiva ? timeAgo(lastTs) : "—"}</span>
-            </div>
-          </div>
-        )}
+            );
+          })}
+        </div>
       </div>
 
       {/* Balizas */}
       <div>
         <div style={{ fontSize: 10, color: THEME.textMuted, fontWeight: 700, letterSpacing: 0.6, padding: "0 4px 8px" }}>
-          BALIZAS · {BALIZAS.length}/3
+          BALIZAS · {balizas.length}/3
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {BALIZAS.map(b => {
+          {balizas.map(b => {
             const isActive = b.id === activeBeacon;
             const lastVista = balizaVista?.[b.id];
             const rssiVal = balizaRssi?.[b.id];
@@ -728,13 +752,13 @@ function DevicesPanel({ pulsera, wsConnected, pulseraActiva, balizaVista, baliza
       <EventsLog wsEvents={wsEvents} wsConnected={wsConnected} />
 
       {/* PANEL DE DIAGNÓSTICO */}
-      <DiagPanel pulsera={pulsera} wsConnected={wsConnected} apiUrl={apiUrl} />
+      <DiagPanel pulsera={residentes[0]} wsConnected={wsConnected} apiUrl={apiUrl} balizas={balizas} />
     </div>
   );
 }
 
 // ─── PANEL DE DIAGNÓSTICO ────────────────────────────────────
-function DiagPanel({ pulsera, wsConnected, apiUrl }) {
+function DiagPanel({ pulsera, wsConnected, apiUrl, balizas }) {
   const [loading, setLoading] = useState({});
   const [redisState, setRedisState] = useState(null);
   const [expanded, setExpanded] = useState(false);
@@ -802,7 +826,7 @@ function DiagPanel({ pulsera, wsConnected, apiUrl }) {
               SIMULAR PRESENCIA (prueba servidor + frontend)
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {BALIZAS.map(b => (
+              {balizas.map(b => (
                 <div key={b.id} style={{ display: "flex", gap: 6 }}>
                   <div style={{ flex: 1, fontSize: 10, color: THEME.textMuted, alignSelf: "center" }}>
                     📡 Baliza {b.id} · {b.room}
@@ -843,7 +867,7 @@ function DiagPanel({ pulsera, wsConnected, apiUrl }) {
               FORZAR HANDOVER FÍSICO (requiere firmware actualizado)
             </div>
             <div style={{ display: "flex", gap: 6 }}>
-              {BALIZAS.map(b => (
+              {balizas.map(b => (
                 <button
                   key={b.id}
                   disabled={loading[`ho${b.id}`]}
@@ -958,16 +982,6 @@ function ServerSetup({ onConnect, currentUrl }) {
   );
 }
 
-// ─── LIVE CLOCK (aislado para evitar re-render del App entero cada segundo) ──
-function LiveClock() {
-  const [t, setT] = useState(() => new Date());
-  useEffect(() => {
-    const id = setInterval(() => setT(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
-  return <>{t.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</>;
-}
-
 // ─── MOBILE NAV ──────────────────────────────────────────────
 function MobileNav({ activeTab, setActiveTab, alertCount }) {
   const tabs = [
@@ -1000,6 +1014,12 @@ export default function App() {
 
   const { api: API_URL, ws: WS_URL } = useMemo(() => buildUrls(serverIP), [serverIP]);
 
+  const BALIZAS = [
+    { id: 1, room: "Habitación 1" },
+    { id: 2, room: "Habitación 2" },
+    { id: 3, room: "Comedor" },
+  ];
+
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", onResize);
@@ -1023,8 +1043,13 @@ export default function App() {
   const [wsEvents, setWsEvents] = useState([]);
   const [locationHistory, setLocationHistory] = useState([]);
   const [toasts, setToasts] = useState([]);
+  const [currentTime, setCurrentTime] = useState(new Date());
   const prevLocationRef = useRef({});
 
+  useEffect(() => {
+    const id = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     const init = INITIAL_RESIDENTES.map(r => ({
@@ -1038,7 +1063,7 @@ export default function App() {
       },
     }));
     setResidentes(init);
-    if (init.length === 1) setSelectedId(init[0].id);
+    if (init.length > 0) setSelectedId(init[0].id);
 
     const h = {}, s = {};
     init.forEach(r => { h[r.id] = []; s[r.id] = []; });
@@ -1216,7 +1241,7 @@ export default function App() {
             </div>
             <div>
               <div style={{ fontSize: 14, fontWeight: 700, color: THEME.text, letterSpacing: "-0.2px", lineHeight: 1.2 }}>Monitor BLE</div>
-              <div style={{ fontSize: 10, color: THEME.textMuted }}>1 pulsera · 3 balizas</div>
+              <div style={{ fontSize: 10, color: THEME.textMuted }}>{residentes.length} {residentes.length === 1 ? "pulsera" : "pulseras"} · 3 balizas</div>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1255,7 +1280,7 @@ export default function App() {
             </div>
           )}
           {activeTab === "devices" && (
-            <DevicesPanel pulsera={pulsera} wsConnected={wsConnected} pulseraActiva={pulseraActiva} balizaVista={balizaVista} balizaRssi={balizaRssi} balizaHeartbeat={balizaHeartbeat} wsEvents={wsEvents} onSelectPulsera={(id) => { setSelectedId(id); setActiveTab("detail"); }} selectedId={selectedId} apiUrl={API_URL} />
+            <DevicesPanel residentes={residentes} wsConnected={wsConnected} balizaVista={balizaVista} balizaRssi={balizaRssi} balizaHeartbeat={balizaHeartbeat} wsEvents={wsEvents} onSelectPulsera={(id) => { setSelectedId(id); setActiveTab("detail"); }} selectedId={selectedId} apiUrl={API_URL} balizas={BALIZAS} />
           )}
           {activeTab === "detail" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -1338,7 +1363,7 @@ export default function App() {
           </div>
           <div>
             <h1 style={{ fontSize: 16, fontWeight: 700, color: THEME.text, letterSpacing: "-0.3px", lineHeight: 1.2 }}>Residencia · Monitor BLE</h1>
-            <span style={{ fontSize: 11, color: THEME.textMuted, fontWeight: 500 }}>1 pulsera · 3 balizas · datos en vivo</span>
+            <span style={{ fontSize: 11, color: THEME.textMuted, fontWeight: 500 }}>{residentes.length} {residentes.length === 1 ? "pulsera" : "pulseras"} · 3 balizas · datos en vivo</span>
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
@@ -1375,7 +1400,7 @@ export default function App() {
             <span><span style={{ color: THEME.accent, fontWeight: 700 }}>3/3</span> balizas</span>
           </div>
           <div style={{ background: THEME.surfaceAlt, border: `1px solid ${THEME.border}`, borderRadius: 8, padding: "6px 14px", fontFamily: "'JetBrains Mono',monospace", fontSize: 13, fontWeight: 600, color: THEME.textMuted, letterSpacing: 1 }}>
-            <LiveClock />
+            {currentTime.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
           </div>
         </div>
       </header>
@@ -1389,7 +1414,7 @@ export default function App() {
             <div style={{ fontSize: 11, color: THEME.textSubtle, marginTop: 2 }}>Hardware desplegado</div>
           </div>
           <div style={{ flex: 1, overflow: "auto", padding: 14 }}>
-            <DevicesPanel pulsera={pulsera} wsConnected={wsConnected} pulseraActiva={pulseraActiva} balizaVista={balizaVista} balizaRssi={balizaRssi} balizaHeartbeat={balizaHeartbeat} wsEvents={wsEvents} onSelectPulsera={setSelectedId} selectedId={selectedId} apiUrl={API_URL} />
+            <DevicesPanel residentes={residentes} wsConnected={wsConnected} balizaVista={balizaVista} balizaRssi={balizaRssi} balizaHeartbeat={balizaHeartbeat} wsEvents={wsEvents} onSelectPulsera={setSelectedId} selectedId={selectedId} apiUrl={API_URL} balizas={BALIZAS} />
           </div>
         </aside>
 
